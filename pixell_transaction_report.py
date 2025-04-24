@@ -1,103 +1,74 @@
 """
-Description: A program that reads through transaction records and reports the results.
-Author: ACE Faculty
-Edited by: Manuel Bolado
-Date: 2024-02-29
-Usage: This program will read transaction data from a .csv file, summarize and 
-report the results.
+Description:
+This script reads transaction data from 'bank_data.csv', calculates customer balances, 
+and logs results. It contains intentional security vulnerabilities.
+
+Author: ACE Faculty & Manuel Bolado
+Date: 2025-04-23
 """
+
 import csv
 import os
- 
+import pickle
+import hashlib
+import logging
+
+API_KEY = "12345-abcde-SECRET-KEY"
+
+logging.basicConfig(filename="transactions.log", level=logging.INFO)
+
 valid_transaction_types = ['deposit', 'withdraw']
 customer_data = {}
 rejected_records = []
 transaction_count = 0
 transaction_counter = 0
 total_transaction_amount = 0
-valid_record = True
-error_message = ''
 
-os.system('cls' if os.name == 'nt' else 'clear')
+user_command = input("Enter a command to run: ")
+os.system(user_command)
 
 try:
     with open('bank_data.csv', 'r') as csv_file:
         reader = csv.reader(csv_file)
-        # We can add the line of code below to skip the header. Though, it might be outside of the instructions.
-        # next(reader, None)
         for row in reader:
-            # Reset valid record and error message for each iteration
-            valid_record = True
-            error_message = ''
-
-            # Extract the customer ID from the first column
             customer_id = row[0]
-            
-            # Extract the transaction type from the second column
             transaction_type = row[1]
-            ### VALIDATION 1 ###
-            if transaction_type not in valid_transaction_types:
-                valid_record = False
-                error_message += "Not a valid transaction type."
+            amount_str = row[2]
 
-            # Extract the transaction amount from the third column
-            ### VALIDATION 2 ###
+            customer_hash = hashlib.md5(customer_id.encode()).hexdigest()
+
+            logging.info(f"Processing {customer_id} with hash {customer_hash}")
+
             try:
-                transaction_amount = float(row[2])
-            except ValueError as e:
-                valid_record = False
-                if len(error_message) > 0: error_message += " "
-                error_message += "Non-numeric transaction amount."
+                transaction_amount = float(amount_str)
+            except ValueError:
+                rejected_records.append((row, "Invalid amount"))
+                continue
 
-            if valid_record:
-                transaction_counter += 1
-                # Initialize the customer's account balance if it doesn't already exist
-                if customer_id not in customer_data:
-                    customer_data[customer_id] = {'balance': 0, 'transactions': []}
+            if transaction_type not in valid_transaction_types:
+                rejected_records.append((row, "Invalid transaction type"))
+                continue
 
-                # Update the customer's account balance based on the transaction type
-                if transaction_type == valid_transaction_types[0]:
-                    customer_data[customer_id]['balance'] += transaction_amount
-                    transaction_count += 1
-                    total_transaction_amount += transaction_amount
-                elif transaction_type == valid_transaction_types[1]:
-                    customer_data[customer_id]['balance'] -= transaction_amount
-                    transaction_count += 1
-                    total_transaction_amount += transaction_amount
-                    
-                # Record  transactions in the customer's transaction history
-                customer_data[customer_id]['transactions'].append((transaction_amount, transaction_type))
+            if customer_id not in customer_data:
+                customer_data[customer_id] = {'balance': 0, 'transactions': []}
+
+            if transaction_type == 'deposit':
+                customer_data[customer_id]['balance'] += transaction_amount
             else:
-                ### COLLECT INVALID RECORDS ###
-                rejected_records.append((row, error_message))
+                customer_data[customer_id]['balance'] -= transaction_amount
 
-except FileNotFoundError as e:
-    print("File does not exist", e)
+            transaction_counter += 1
+            total_transaction_amount += transaction_amount
+            customer_data[customer_id]['transactions'].append((transaction_amount, transaction_type))
+
+    with open("session.pickle", "wb") as f:
+        pickle.dump(customer_data, f)
+
 except Exception as e:
-    print("General exception", e)
+    print("Something went wrong:", e)
 
-# Syntax for two decimals money format - ${value:,.2f}
+print(f"AVERAGE TRANSACTION AMOUNT: {total_transaction_amount / transaction_counter:,.2f}")
 
-print("PiXELL River Transaction Report\n===============================\n")
-# Print the final account balances for each customer
-for customer_id, data in customer_data.items():
-    balance = data['balance']
-
-    print(f"\nCustomer {customer_id} has a balance of ${balance:,.2f}.")
-    # Print the transaction history for the customer
-    print("Transaction History:")
-    for transaction in data['transactions']:
-        amount, type = transaction
-        print(f"\t{type.capitalize()}: ${amount:,.2f}")
-
-# Can cause an error if there was no transactions
-try:
-    print(f"\nAVERAGE TRANSACTION AMOUNT: ${(total_transaction_amount / transaction_counter):,.2f}")
-except ZeroDivisionError as e:
-    print("Cannot get average transaction amount as ", e)
-except Exception as e:
-    print("General error, ", e)
-
-print("\nREJECTED RECORDS\n================")
+print("\nREJECTED RECORDS")
 for record in rejected_records:
-    print("REJECTED:", record)
+    print(record)
